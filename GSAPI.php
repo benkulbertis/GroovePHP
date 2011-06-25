@@ -103,7 +103,7 @@ class GSAPI {
   public function getError() {return $this->error;}
 		
   /**
-   * Get information about the api key used.
+   * Get information about the API key used.
    *
    * Does not count as an API call.
    */
@@ -115,6 +115,8 @@ class GSAPI {
    * Add a song to a user's favorites. It is a violation to favorite songs for a user without notification.
    *
    * @param		int		songid
+   *
+   * @return  boolean
    */
   public function addUserFavoriteSong($songid){
     $result = self::callRemote('addUserFavoriteSong', array('GSAuth' => $this->auth, 'songID' => $songid));
@@ -125,16 +127,18 @@ class GSAPI {
    * Create a playlist.
    * 
    * @param		string	playlistName
-   * @param		array		songids
+   * @param		array		songIDs
+   *
+   * @return  boolean
    */
-  public function createPlaylist($playlistName, $songids = array()){
-    $songids = gs_json_encode($songids);
-    $result = self::callRemote('createPlaylist', array('GSAuth' => $this->auth, 'name' => $playlistName, 'songIDs' => $songids));
+  public function createPlaylist($playlistName, $songIDs = array()){
+    $songIDs = gs_json_encode($songIDs);
+    $result = self::callRemote('createPlaylist', array('GSAuth' => $this->auth, 'name' => $playlistName, 'songIDs' => $songIDs));
     return self::getReturn($result, true);
   }
 
   /**
-   * Authenticates the user for current API session
+   * Authenticates the user for current API session.
    * 
    * Accepts a username and password by default, but if $token is set to true it will accept
    * a pre-hashed token instead for security so that the password does not have to appear in plain text.
@@ -162,7 +166,7 @@ class GSAPI {
   }
 
   /**
-   * Gets song information
+   * Gets song information.
    *
    * @param   int     songID
    * @return  mixed   Song information or false
@@ -173,7 +177,7 @@ class GSAPI {
   }
 
   /**
-   * Gets the favorite songs of the logged-in user
+   * Gets the favorite songs of the logged-in user.
    *
    * @return  mixed   num array of songs or false
    */
@@ -183,7 +187,7 @@ class GSAPI {
   }
     
   /**
-   * Gets the library of the logged-in user
+   * Gets the library of the logged-in user.
    *
    * @return  mixed   num array of songs or false
    */
@@ -191,20 +195,82 @@ class GSAPI {
     $result = self::callRemote('getUserLibrary', array('GSAuth' => $this->auth));
     return self::getReturn($result);
   }
+  
+  /**
+   * Gets a user's playlists.
+   *
+   * @param   string  type  the way the user whose playlists are to be returned will be specified ["gsauth","username","userid"]
+   * @param   string  data  the gsauth, username, or userid for the user (must match type specified in type param)
+   *
+   * @return  mixed   num array of the playlists or false
+   */
+  public function getUserPlaylists($type, $data = null){
+    if($type === 'gsauth') $data =& $this->auth;
+    
+    $result = self::callRemote('getUserPlaylistsEx', array('type' => $type, 'data' => $data));
+    return self::getReturn($result);
+  }
+  
+  /**
+   * Replace the songs of a playlist with the ones given. 
+   * BE CAREFUL WITH THIS ONE! This replaces all the songs of a playlist with the specified ones. The old contents are gone forever.
+   *
+   * @param   int     playlistID
+   * @param   array   songIDs
+   *
+   * @return  boolean
+   */
+  public function modifyPlaylist($playlistID, $songIDs = array()){
+    $songIDs = gs_json_encode($songIDs);
+    $result = self::callRemote('modifyPlaylist', array('GSAuth' => $this->auth, 'playlistID' => $playlistID, 'songIDs' => $songIDs));
+    return self::getReturn($result, true);
+  }
+  
+  /**
+   * Returns whatever publically accessable information there is available about a user.
+   *
+   * @param   string  type  the way the user whose information is to be returned will be specified ["gsauth","username","userid"]
+   * @param   string  data  the gsauth, username, or userid for the user (must match type specified in type param)
+   *
+   * @param   mixed   array of information or false
+   */
+  public function userInfo($type = , $data = null){
+    if($type === 'gsauth'){
+      $result = self::callRemote('userInfoFromGSAuth', array('GSAuth' => $this->auth));
+    }
+    elseif($type === 'username'){
+      $result = self::callRemote('userInfo', array('username' => $data));
+    } else {
+      $result = self::callRemote('userInfoFromID', array('userID' => $data));
+    }
+    return self::getReturn($result);
+  }
 
-  public function getWidgetEmbedCode($width, $height, $ids, $swfName = 'songWidget.swf', $ap = 0, $colors = null, $style = null){
-    $ids = 'songIDs=' . $ids['songIDs'];
-    $colors = is_array($colors) && !empty($colors) ? '&amp;' . http_build_query($colors) : '';
-    $ap = ($ap != 0) ? "&amp;p=$ap" : '';
+  /**
+   * Generate the HTML to embed a song or queue of songs.
+   * This is not part of the API, but its awesome. 
+   *
+   * @param   int     width
+   * @param   int     height
+   * @param   int     songID
+   * @param   boolean autoplay
+   * @param   string  style     style of the widget ["metal","wood","water","grass"]
+   *
+   * @return  string  the widget embed code
+   */
+  public function getWidgetEmbedCode($width, $height, $songID, $style = "metal", $autoplay = false){
+    $songID = 'songIDs=' . $songID;
+    $autoplay = ($autoplay === true) ? "&amp;p=1" : '&amp;p=0';
     $style = '&style=' . $style;
     $embed = "
     <object width='$width' height='$height'>
-        <param name='movie' value='http://listen.grooveshark.com/$swfName'></param>
+        <param name='movie' value='http://listen.grooveshark.com/songWidget.swf'></param>
         <param name='wmode' value='window'></param>
         <param name='allowScriptAccess' value='always'></param>
-        <param name='flashvars' value='hostname=cowbell.grooveshark.com&amp;{$ids}{$ap}{$colors}{$style}'></param>
-        <embed src='http://listen.grooveshark.com/$swfName' type='application/x-shockwave-flash' width='$width' height='$height' flashvars='hostname=cowbell.grooveshark.com&amp;{$ids}{$ap}{$colors}{$style}' allowScriptAccess='always' wmode='window'></embed>
-    </object>";
+        <param name='flashvars' value='hostname=cowbell.grooveshark.com&amp;{$ids}{$ap}{$style}'></param>
+        <embed src='http://listen.grooveshark.com/$swfName' type='application/x-shockwave-flash' width='$width' height='$height' flashvars='hostname=cowbell.grooveshark.com&amp;{$ids}{$ap}{$style}' allowScriptAccess='always' wmode='window'></embed>
+    </object>
+    ";
     return $embed;
   }
 
